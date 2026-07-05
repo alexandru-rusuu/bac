@@ -172,12 +172,14 @@ def run_once() -> None:
 
     # ---- PRIMA rulare: stabileste baseline + confirmare ca merge Telegram ----
     if not st.get("initialized"):
+        iv = os.environ.get("CHECK_INTERVAL")
+        cadenta = f"la fiecare {iv} secunde" if iv else "periodic"
         telegram(
-            "✅ <b>Monitor Bacalaureat 2026 pornit cu succes!</b>\n\n"
-            f"Verific automat (la ~30 secunde):\n{BASE}/\n\n"
-            "Primești o notificare 🔔 la orice modificare și un anunț special "
-            "când apar rezultatele.\n"
-            f"⏰ {now_ro()} (ora RO)"
+            "<b>Monitor Bacalaureat 2026 activ</b>\n\n"
+            f"Verific automat {cadenta} pagina oficiala:\n{BASE}/\n\n"
+            "Vei primi un mesaj la orice modificare si un anunt clar in momentul "
+            "in care se publica rezultatele.\n\n"
+            f"Data: {now_ro()} (ora Romaniei)"
         )
         save_state(
             {
@@ -195,13 +197,14 @@ def run_once() -> None:
     # ---- 1) REZULTATE noi in Noutati (semnalul principal, mesaj "tare") ----
     new_results = [s for s in cur_results if s not in seen_results]
     if new_results:
-        detalii = "\n".join(f"• {s}" for s in new_results)
+        detalii = "\n".join(f"- {s}" for s in new_results)
         alerts.append(
-            "🎉🎉🎉 <b>AU APĂRUT REZULTATELE LA BACALAUREAT 2026!</b> 🎉🎉🎉\n\n"
+            "<b>REZULTATE BACALAUREAT 2026</b>\n\n"
+            "Au fost publicate rezultatele:\n"
             f"{detalii}\n\n"
-            f"📊 Rezultate: {BASE}/rapoarte/\n"
-            f"👉 Noutăți: {TARGETS['news']}\n"
-            f"⏰ {now_ro()} (ora RO)"
+            f"Rezultate: {BASE}/rapoarte/\n"
+            f"Noutati: {TARGETS['news']}\n"
+            f"Data: {now_ro()} (ora Romaniei)"
         )
         seen_results = seen_results + new_results
         alerted.add("news")
@@ -216,15 +219,15 @@ def run_once() -> None:
             name = PAGE_NAMES.get(key, key)
             extra = ""
             if key in ("rapoarte", "rapoarte_sept"):
-                extra = "\n(posibil rezultate încărcate înainte de anunțul oficial)"
+                extra = "\nPosibil rezultate incarcate inainte de anuntul oficial."
             preview = ""
             if key in ("news", "index"):
                 t = visible_text(fetched[key])
-                preview = "\n\n" + t[:600] + ("…" if len(t) > 600 else "")
+                preview = "\n\n" + t[:600] + ("..." if len(t) > 600 else "")
             alerts.append(
-                f"ℹ️ <b>Modificare pe site — {name}</b>{extra}{preview}\n\n"
-                f"👉 {TARGETS[key]}\n"
-                f"⏰ {now_ro()} (ora RO)"
+                f"<b>Modificare pe site: {name}</b>{extra}{preview}\n\n"
+                f"Link: {TARGETS[key]}\n"
+                f"Data: {now_ro()} (ora Romaniei)"
             )
             alerted.add(key)
 
@@ -251,22 +254,25 @@ def run_once() -> None:
 def main() -> int:
     # Mod de test: trimite un mesaj de proba
     if os.environ.get("TEST_ALERT"):
-        telegram(f"🔔 <b>Test notificare</b> — monitorul funcționează.\n⏰ {now_ro()} (ora RO)")
+        telegram(f"<b>Test notificare</b>\nMonitorul functioneaza corect.\nData: {now_ro()} (ora Romaniei)")
         return 0
 
     interval = int(os.environ.get("CHECK_INTERVAL", "0"))
     if interval > 0:
-        # Mod-bucla: verifica repetat pana expira LOOP_DURATION (implicit ~16 min,
-        # putin peste intervalul de cron ca sa nu ramana goluri intre rulari).
-        duration = int(os.environ.get("LOOP_DURATION", "960"))
-        deadline = time.time() + duration
-        print(f"Mod-buclă: verific la fiecare {interval}s timp de {duration}s.")
+        # Mod-bucla: verifica repetat la fiecare `interval` secunde.
+        # LOOP_DURATION = 0 (implicit) => ruleaza la infinit (potrivit pentru systemd,
+        # care oricum reporneste procesul daca pica). > 0 => se opreste dupa atatea
+        # secunde (folosit de GitHub Actions ca sa incapa in fereastra de cron).
+        duration = int(os.environ.get("LOOP_DURATION", "0"))
+        deadline = time.time() + duration if duration > 0 else None
+        print(f"Mod-bucla: verific la fiecare {interval}s"
+              + (f" timp de {duration}s." if duration else " (continuu)."))
         while True:
             try:
                 run_once()
             except Exception as e:  # noqa: BLE001
                 print("!! Eroare la verificare:", e)
-            if time.time() + interval >= deadline:
+            if deadline is not None and time.time() + interval >= deadline:
                 break
             time.sleep(interval)
     else:

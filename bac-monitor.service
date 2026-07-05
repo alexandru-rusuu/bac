@@ -1,0 +1,19 @@
+[Unit]
+Description=Monitor Bacalaureat 2026
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bac-monitor
+# Tokenul si chat_id-ul stau intr-un fisier separat, nu in cod:
+EnvironmentFile=/etc/bac-monitor.env
+# Verifica la fiecare 15 secunde, continuu:
+Environment=CHECK_INTERVAL=15
+ExecStart=/usr/bin/python3 /opt/bac-monitor/monitor.py
+# Reporneste automat daca pica (retea, eroare etc.):
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

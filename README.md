@@ -1,89 +1,108 @@
-# Monitor Bacalaureat 2026 🔔
+# Monitor Bacalaureat 2026
 
-Verifică automat site-ul <https://static.bacalaureat.edu.ro/2026/> **la ~30 de secunde** și îți
-trimite o **notificare instant pe Telegram** la orice modificare — și un anunț special când apar
-rezultatele. Ca să nu mai dai tu refresh.
+Verifică automat site-ul <https://static.bacalaureat.edu.ro/2026/> la fiecare câteva secunde și
+trimite o notificare pe **Telegram** la orice modificare — și un anunț clar în momentul în care se
+publică rezultatele. Fără dependințe externe, doar Python standard.
 
-Rulează gratuit pe **GitHub Actions**. Zero server, zero mentenanță.
+Ce monitorizează:
+- `info/news.html` — secțiunea Noutăți (semnalul principal: anunțul de rezultate)
+- `index.html` — pagina principală
+- `rapoarte/` și `rapoarte_sept/` — directoarele de rezultate (early-warning)
 
-> ⚠️ **Fă repo-ul PUBLIC.** Pe repo-uri publice minutele de GitHub Actions sunt **nelimitate și gratis**,
-> deci monitorul poate rula non-stop. Pe repo privat ai doar ~2000 min/lună și s-ar consuma repede.
-> (Nu pui nimic secret în cod — tokenul stă în Secrets, nu în fișiere.)
-
-## Ce monitorizează
-
-- `info/news.html` — secțiunea **Noutăți** (semnalul principal: anunțul „Rezultatele ... au fost publicate")
-- `rapoarte/` și `rapoarte_sept/` — directoarele de rezultate (early-warning: dacă se încarcă înainte de anunț)
-
-Detectează separat **sesiunea 1** (iunie-iulie) și **sesiunea a 2-a** (august), deci merge tot anul.
+Detectează separat sesiunea 1 (iunie-iulie) și sesiunea a 2-a (august).
 
 ---
 
-## Setup (o singură dată, ~10 minute)
+## Partea 1 — Botul de Telegram (o singură dată)
 
-### 1. Fă-ți un bot de Telegram
-1. În Telegram, caută **@BotFather** și dă-i `/newbot`.
-2. Alege un nume și un username. Primești un **token** de forma `123456789:AAExxxxxxxxxxxxxxxxxxxx`.
-3. Caută botul tău nou și apasă **Start** (trimite-i orice mesaj, ex. `salut`).
-
-### 2. Află `chat_id`-ul tău
-1. Deschide în browser (înlocuiește `<TOKEN>` cu tokenul tău):
+1. În Telegram, caută **@BotFather**, dă `/newbot`, alege un nume și un username.
+   Primești un **token** de forma `123456789:AAExxxxxxxxxxxxxxxxxxxx`.
+2. Deschide botul tău nou și apasă **Start** (trimite-i orice mesaj).
+3. Află **chat_id**-ul tău: deschide în browser (înlocuiește `<TOKEN>`):
    ```
    https://api.telegram.org/bot<TOKEN>/getUpdates
    ```
-2. Caută în răspuns `"chat":{"id":123456789,...}`. Numărul acela e **chat_id**-ul tău.
-   - Dacă e gol, trimite întâi un mesaj botului și reîncarcă pagina.
+   Caută `"chat":{"id":123456789,...}` — numărul acela e chat_id-ul tău.
+   (Dacă e gol, trimite întâi un mesaj botului și reîncarcă pagina.)
 
-### 3. Pune codul pe GitHub
-1. Creează un repo nou pe GitHub (ex. `bac-monitor`).
-2. Urcă fișierele din acest folder (vezi comenzile de mai jos).
-
-### 4. Adaugă secretele în repo
-În repo → **Settings → Secrets and variables → Actions → New repository secret**, adaugă:
-
-| Nume | Valoare |
-|------|---------|
-| `TELEGRAM_BOT_TOKEN` | tokenul de la BotFather |
-| `TELEGRAM_CHAT_ID` | chat_id-ul tău |
-
-### 5. Activează și testează
-1. Tab-ul **Actions** → dacă îți cere, apasă „I understand my workflows, go ahead and enable them".
-2. Selectează **Monitor Bacalaureat 2026** → **Run workflow** (pornire manuală).
-3. Ar trebui să primești pe Telegram mesajul: **„✅ Monitor Bacalaureat 2026 pornit cu succes!"**
-
-Gata. De acum verifică singur la ~5 minute și te anunță când apar rezultatele. 🎉
+Notează cele două valori — le folosești la pasul următor.
 
 ---
 
-## Comenzi git pentru a urca pe GitHub
+## Partea 2 — Rulare pe DigitalOcean (droplet)
+
+Cel mai mic droplet costă ~$4/lună (~$1 pe săptămână), deci creditul de $5 acoperă peste o lună.
+
+### 1. Creează dropletul
+- În DigitalOcean: **Create → Droplets**
+- Imagine: **Ubuntu** (ultima versiune LTS)
+- Plan: **Basic → Regular → $4/lună** (512 MB e suficient)
+- Regiune: **Frankfurt** sau **Amsterdam** (aproape de România)
+- Autentificare: SSH key sau parolă (parola e mai simplă)
+- Apasă **Create Droplet**
+
+### 2. Intră pe server
+Cel mai simplu: în pagina dropletului → **Access → Launch Droplet Console** (terminal direct în browser, fără SSH).
+
+### 3. Instalează și pornește (copiază comenzile)
 
 ```bash
-git init
-git add .
-git commit -m "Monitor Bacalaureat 2026"
-git branch -M main
-git remote add origin https://github.com/UTILIZATORUL_TAU/bac-monitor.git
-git push -u origin main
+# Python + git
+apt update && apt install -y python3 git
+
+# Adu codul (înlocuiește cu repo-ul tău, sau vezi nota de mai jos)
+git clone https://github.com/UTILIZATORUL_TAU/bac-monitor.git /opt/bac-monitor
+
+# Pune tokenul și chat_id-ul într-un fișier separat (nu în cod)
+nano /etc/bac-monitor.env
 ```
+
+În `nano`, scrie (cu valorile tale), apoi salvează cu **Ctrl+O, Enter, Ctrl+X**:
+```
+TELEGRAM_BOT_TOKEN=123456789:AAExxxxxxxxxxxxxxxxxxxx
+TELEGRAM_CHAT_ID=123456789
+```
+
+Continuă:
+```bash
+# Instalează serviciul care rulează non-stop și pornește automat la reboot
+cp /opt/bac-monitor/bac-monitor.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now bac-monitor
+
+# Verifică
+systemctl status bac-monitor --no-pager
+```
+
+Imediat ar trebui să primești pe Telegram mesajul **„Monitor Bacalaureat 2026 activ"**.
+Gata — verifică singur la 15 secunde, non-stop, și te anunță la orice modificare.
+
+### Comenzi utile
+```bash
+journalctl -u bac-monitor -f          # vezi log-ul live
+systemctl restart bac-monitor         # repornește
+systemctl stop bac-monitor            # oprește
+nano /etc/bac-monitor.env             # schimbă tokenul/chat_id (apoi restart)
+```
+
+> **Nota (fără GitHub):** dacă nu vrei să pui codul pe GitHub, poți crea fișierele direct pe server:
+> `mkdir -p /opt/bac-monitor && nano /opt/bac-monitor/monitor.py` (lipești conținutul), la fel pentru
+> `bac-monitor.service`. Restul comenzilor rămân identice.
 
 ---
 
-## Note
+## Reglaje
 
-- **Rapiditate (~30 sec):** GitHub nu permite cron sub 5 minute, dar fiecare job rulează o buclă
-  internă care verifică la fiecare **30 de secunde** timp de ~16 minute; cron-ul repornește jobul
-  la 15 min → acoperire continuă. Poți schimba viteza din `CHECK_INTERVAL` (secunde) în
-  [.github/workflows/monitor.yml](.github/workflows/monitor.yml).
-- **Test manual al notificării:** rulează local `TEST_ALERT=1 python monitor.py`
-  (cu variabilele `TELEGRAM_BOT_TOKEN` și `TELEGRAM_CHAT_ID` setate) ca să primești un mesaj de probă.
-- **Stare:** `state.json` reține ce a fost deja văzut ca să nu primești același anunț de mai multe ori.
-  E salvat automat în repo de către workflow.
-- Fără dependințe externe — doar Python standard.
+- **Cât de des verifică:** schimbă `Environment=CHECK_INTERVAL=15` (secunde) în
+  `/etc/systemd/system/bac-monitor.service`, apoi `systemctl daemon-reload && systemctl restart bac-monitor`.
+- **Test notificare:** `TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... TEST_ALERT=1 python3 monitor.py`
+- **Stare:** `state.json` (creat lângă script) reține ce a fost deja văzut, ca să nu primești același anunț de două ori.
 
-### Bonus: rulare pe VM pentru viteză maximă (opțional)
+---
 
-Pe un server Linux (ex. droplet DigitalOcean), pune un cron la fiecare minut:
-```bash
-* * * * * TELEGRAM_BOT_TOKEN=xxx TELEGRAM_CHAT_ID=yyy /usr/bin/python3 /cale/catre/monitor.py >> /var/log/bac.log 2>&1
-```
-Același `monitor.py` funcționează identic; folosește `state.json` din același folder.
+## Alternativă gratuită: GitHub Actions
+
+Repo-ul include și `.github/workflows/monitor.yml`, care rulează același `monitor.py` gratuit pe
+GitHub Actions (verificare la ~30 sec, fără server). Folosește-l **doar dacă NU** rulezi pe droplet —
+altfel primești notificări duble. Detalii: pune secretele `TELEGRAM_BOT_TOKEN` și `TELEGRAM_CHAT_ID`
+în Settings → Secrets → Actions, fă repo-ul public și activează workflow-ul din tab-ul Actions.

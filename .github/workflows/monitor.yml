@@ -36,7 +36,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHECK_INTERVAL: "30" # verifica la fiecare 30 de secunde
           LOOP_DURATION: "960" # ruleaza bucla ~16 min (peste intervalul de cron de 15 min)
-        run: python monitor.py
+        run: python -u monitor.py
 
       - name: Salveaza starea daca s-a schimbat
         if: always()

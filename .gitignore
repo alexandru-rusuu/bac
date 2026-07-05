@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 .env
+# Local pe PC (contine tokenul - NU se urca pe GitHub):
+run_monitor.ps1
+monitor.log
+state.json

@@ -1,12 +1,12 @@
 name: Monitor Bacalaureat 2026
 
 on:
-  schedule:
-    # GitHub nu permite cron sub 5 minute, dar fiecare rulare a jobului verifica
-    # intern la cate 30 de secunde timp de ~16 minute (vezi LOOP_DURATION mai jos).
-    # Repornim jobul la fiecare 15 minute => acoperire continua, fara goluri.
-    - cron: "*/15 * * * *"
-  workflow_dispatch: {} # pornire manuala din tab-ul Actions
+  # DEZACTIVAT: serverele GitHub nu pot accesa site-ul (blocat pe IP-uri din afara
+  # Romaniei -> timeout). Monitorul ruleaza pe PC-ul din Romania: run_monitor.ps1
+  # pornit automat din folderul Startup. Vezi README.
+  # schedule:
+  #   - cron: "*/15 * * * *"
+  workflow_dispatch: {} # doar pornire manuala
 
 # O singura rulare activa; urmatoarea se pune la coada si porneste imediat ce
 # se termina cea curenta (fara suprapuneri, fara goluri).

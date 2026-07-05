@@ -1,0 +1,46 @@
+name: Monitor Bacalaureat 2026
+
+on:
+  schedule:
+    # La fiecare 5 minute (cel mai des permis de GitHub cron).
+    # GitHub poate intarzia rularile cu cateva minute la ore de varf.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # permite pornirea manuala din tab-ul Actions
+
+# Nu lasa doua rulari sa se suprapuna (evita conflicte la push-ul de stare).
+concurrency:
+  group: bac-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write # pentru a salva state.json inapoi in repo
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ruleaza monitorul
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python monitor.py
+
+      - name: Salveaza starea daca s-a schimbat
+        run: |
+          if [[ -n "$(git status --porcelain state.json)" ]]; then
+            git config user.name "bac-monitor-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state.json
+            git commit -m "update state [skip ci]"
+            git push
+          else
+            echo "Starea nu s-a schimbat."
+          fi

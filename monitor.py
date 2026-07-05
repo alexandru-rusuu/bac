@@ -187,6 +187,7 @@ def run_once() -> None:
                 "hashes": {k: sha(visible_text(v)) for k, v in fetched.items()},
                 "seen_results": cur_results,  # ce e deja acolo NU e o noutate
                 "last_checked": now_ro(),
+                "last_heartbeat": time.time(),
             }
         )
         return
@@ -234,6 +235,16 @@ def run_once() -> None:
     for a in alerts:
         telegram(a)
 
+    # ---- Semnal de viata periodic (heartbeat), daca e activat ----
+    last_hb = st.get("last_heartbeat", 0)
+    hb_min = int(os.environ.get("HEARTBEAT_MINUTES", "0"))
+    if hb_min > 0 and time.time() - last_hb >= hb_min * 60:
+        telegram(
+            f"Monitorul ruleaza normal. Ultima verificare: {now_ro()} (ora Romaniei). "
+            "Nicio noutate deocamdata."
+        )
+        last_hb = time.time()
+
     # ---- Actualizeaza starea ----
     for key, v in fetched.items():
         hashes[key] = sha(visible_text(v))
@@ -243,6 +254,7 @@ def run_once() -> None:
             "hashes": hashes,
             "seen_results": seen_results,
             "last_checked": now_ro(),
+            "last_heartbeat": last_hb,
         }
     )
     save_state(st)

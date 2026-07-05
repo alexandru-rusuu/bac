@@ -2,12 +2,14 @@ name: Monitor Bacalaureat 2026
 
 on:
   schedule:
-    # La fiecare 5 minute (cel mai des permis de GitHub cron).
-    # GitHub poate intarzia rularile cu cateva minute la ore de varf.
-    - cron: "*/5 * * * *"
-  workflow_dispatch: {} # permite pornirea manuala din tab-ul Actions
+    # GitHub nu permite cron sub 5 minute, dar fiecare rulare a jobului verifica
+    # intern la cate 30 de secunde timp de ~16 minute (vezi LOOP_DURATION mai jos).
+    # Repornim jobul la fiecare 15 minute => acoperire continua, fara goluri.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {} # pornire manuala din tab-ul Actions
 
-# Nu lasa doua rulari sa se suprapuna (evita conflicte la push-ul de stare).
+# O singura rulare activa; urmatoarea se pune la coada si porneste imediat ce
+# se termina cea curenta (fara suprapuneri, fara goluri).
 concurrency:
   group: bac-monitor
   cancel-in-progress: false
@@ -18,6 +20,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,13 +30,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Ruleaza monitorul
+      - name: Ruleaza monitorul (buclă la 30s)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CHECK_INTERVAL: "30" # verifica la fiecare 30 de secunde
+          LOOP_DURATION: "960" # ruleaza bucla ~16 min (peste intervalul de cron de 15 min)
         run: python monitor.py
 
       - name: Salveaza starea daca s-a schimbat
+        if: always()
         run: |
           if [[ -n "$(git status --porcelain state.json)" ]]; then
             git config user.name "bac-monitor-bot"

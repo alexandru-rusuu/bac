@@ -3,11 +3,15 @@
 """
 Monitor Bacalaureat 2026.
 
-Verifica pagina de Noutati si directoarele de rezultate ale site-ului
-https://static.bacalaureat.edu.ro/2026/ si trimite o notificare pe Telegram
-imediat ce apar rezultatele (sau orice modificare relevanta).
+Verifica site-ul https://static.bacalaureat.edu.ro/2026/ si trimite o notificare
+pe Telegram la ORICE modificare (in special cand apar rezultatele).
 
 Fara dependinte externe - foloseste doar biblioteca standard Python.
+
+Moduri:
+  python monitor.py                 -> o singura verificare
+  CHECK_INTERVAL=30 python monitor.py  -> bucla: verifica la 30s pana la LOOP_DURATION
+  TEST_ALERT=1 python monitor.py    -> trimite un mesaj de proba si iese
 """
 
 import hashlib
@@ -16,6 +20,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -33,9 +38,16 @@ RO_TZ = timezone(timedelta(hours=3))
 
 BASE = "https://static.bacalaureat.edu.ro/2026"
 TARGETS = {
-    "news": f"{BASE}/info/news.html",          # <- Noutati (semnalul principal)
-    "rapoarte": f"{BASE}/rapoarte/",           # rezultate prima sesiune (iunie-iulie)
-    "rapoarte_sept": f"{BASE}/rapoarte_sept/", # rezultate sesiunea a doua (august)
+    "news": f"{BASE}/info/news.html",           # Noutati (semnalul principal)
+    "index": f"{BASE}/index.html",              # pagina principala
+    "rapoarte": f"{BASE}/rapoarte/",            # rezultate prima sesiune (iunie-iulie)
+    "rapoarte_sept": f"{BASE}/rapoarte_sept/",  # rezultate sesiunea a doua (august)
+}
+PAGE_NAMES = {
+    "news": "Noutăți",
+    "index": "Pagina principală",
+    "rapoarte": "Rezultate prima sesiune (iunie-iulie)",
+    "rapoarte_sept": "Rezultate a doua sesiune (august)",
 }
 
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.json")
@@ -136,12 +148,8 @@ def telegram(text: str) -> bool:
     return False
 
 
-def main() -> int:
-    # Mod de test: TEST_ALERT=1 python monitor.py  -> trimite un mesaj de proba
-    if os.environ.get("TEST_ALERT"):
-        telegram(f"🔔 <b>Test notificare</b> — monitorul functioneaza.\n⏰ {now_ro()} (ora RO)")
-        return 0
-
+def run_once() -> None:
+    """O singura verificare a tuturor paginilor."""
     st = load_state()
 
     fetched = {}
@@ -152,9 +160,9 @@ def main() -> int:
             print(f"!! Nu am putut descarca {key} ({url}): {e}")
 
     if "news" not in fetched:
-        # Fara pagina principala nu putem decide nimic; nu modificam starea.
-        print("Pagina de Noutati indisponibila momentan. Ies fara modificari.")
-        return 0
+        # Fara pagina principala de Noutati nu decidem nimic; nu modificam starea.
+        print("Pagina de Noutati indisponibila momentan. Sar peste aceasta verificare.")
+        return
 
     news_text = visible_text(fetched["news"])
     cur_results = results_sentences(news_text)
@@ -166,8 +174,9 @@ def main() -> int:
     if not st.get("initialized"):
         telegram(
             "✅ <b>Monitor Bacalaureat 2026 pornit cu succes!</b>\n\n"
-            f"Verific automat la fiecare ~5 minute:\n{TARGETS['news']}\n\n"
-            "Primesti o notificare 🔔 imediat ce apar rezultatele.\n"
+            f"Verific automat (la ~30 secunde):\n{BASE}/\n\n"
+            "Primești o notificare 🔔 la orice modificare și un anunț special "
+            "când apar rezultatele.\n"
             f"⏰ {now_ro()} (ora RO)"
         )
         save_state(
@@ -178,11 +187,12 @@ def main() -> int:
                 "last_checked": now_ro(),
             }
         )
-        return 0
+        return
 
     alerts = []
+    alerted = set()
 
-    # ---- 1) REZULTATE noi in Noutati (semnalul principal) ----
+    # ---- 1) REZULTATE noi in Noutati (semnalul principal, mesaj "tare") ----
     new_results = [s for s in cur_results if s not in seen_results]
     if new_results:
         detalii = "\n".join(f"• {s}" for s in new_results)
@@ -194,33 +204,29 @@ def main() -> int:
             f"⏰ {now_ro()} (ora RO)"
         )
         seen_results = seen_results + new_results
+        alerted.add("news")
 
-    # ---- 2) Noutati s-a modificat, dar fara anunt de rezultate (informativ) ----
-    news_hash = sha(news_text)
-    if not new_results and news_hash != hashes.get("news"):
-        preview = news_text[:600] + ("…" if len(news_text) > 600 else "")
-        alerts.append(
-            "ℹ️ <b>Site-ul Bacalaureat 2026 s-a modificat</b> (secțiunea Noutăți)\n\n"
-            f"{preview}\n\n"
-            f"👉 {TARGETS['news']}\n"
-            f"⏰ {now_ro()} (ora RO)"
-        )
-
-    # ---- 3) Continutul directoarelor de rezultate s-a schimbat (early warning) ----
-    for key in ("rapoarte", "rapoarte_sept"):
-        if key not in fetched:
+    # ---- 2) ORICE alta modificare pe oricare pagina monitorizata (informativ) ----
+    for key in TARGETS:
+        if key not in fetched or key in alerted:
             continue
         hv = sha(visible_text(fetched[key]))
         old = hashes.get(key)
         if old is not None and hv != old:
-            sess = "prima sesiune (iunie-iulie)" if key == "rapoarte" else "a doua sesiune (august)"
+            name = PAGE_NAMES.get(key, key)
+            extra = ""
+            if key in ("rapoarte", "rapoarte_sept"):
+                extra = "\n(posibil rezultate încărcate înainte de anunțul oficial)"
+            preview = ""
+            if key in ("news", "index"):
+                t = visible_text(fetched[key])
+                preview = "\n\n" + t[:600] + ("…" if len(t) > 600 else "")
             alerts.append(
-                f"⚠️ <b>Posibil rezultate încărcate — {sess}</b>\n"
-                f"Conținutul directorului de rezultate s-a modificat "
-                f"(poate aparea inainte de anuntul oficial).\n\n"
-                f"👉 {BASE}/{key}/\n"
+                f"ℹ️ <b>Modificare pe site — {name}</b>{extra}{preview}\n\n"
+                f"👉 {TARGETS[key]}\n"
                 f"⏰ {now_ro()} (ora RO)"
             )
+            alerted.add(key)
 
     for a in alerts:
         telegram(a)
@@ -240,6 +246,31 @@ def main() -> int:
 
     if not alerts:
         print(f"[{now_ro()}] Nicio modificare. (rezultate cunoscute: {len(seen_results)})")
+
+
+def main() -> int:
+    # Mod de test: trimite un mesaj de proba
+    if os.environ.get("TEST_ALERT"):
+        telegram(f"🔔 <b>Test notificare</b> — monitorul funcționează.\n⏰ {now_ro()} (ora RO)")
+        return 0
+
+    interval = int(os.environ.get("CHECK_INTERVAL", "0"))
+    if interval > 0:
+        # Mod-bucla: verifica repetat pana expira LOOP_DURATION (implicit ~16 min,
+        # putin peste intervalul de cron ca sa nu ramana goluri intre rulari).
+        duration = int(os.environ.get("LOOP_DURATION", "960"))
+        deadline = time.time() + duration
+        print(f"Mod-buclă: verific la fiecare {interval}s timp de {duration}s.")
+        while True:
+            try:
+                run_once()
+            except Exception as e:  # noqa: BLE001
+                print("!! Eroare la verificare:", e)
+            if time.time() + interval >= deadline:
+                break
+            time.sleep(interval)
+    else:
+        run_once()
     return 0
 
 

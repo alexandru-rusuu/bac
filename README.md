@@ -1,10 +1,14 @@
 # Monitor Bacalaureat 2026 🔔
 
-Verifică automat site-ul <https://static.bacalaureat.edu.ro/2026/> și îți trimite
-o **notificare instant pe Telegram** imediat ce apar rezultatele — ca să nu mai dai tu refresh.
+Verifică automat site-ul <https://static.bacalaureat.edu.ro/2026/> **la ~30 de secunde** și îți
+trimite o **notificare instant pe Telegram** la orice modificare — și un anunț special când apar
+rezultatele. Ca să nu mai dai tu refresh.
 
-Rulează gratuit pe **GitHub Actions** (inclus în GitHub Student Pack, dar e gratis oricum
-pe repo-uri publice). Zero server, zero mentenanță.
+Rulează gratuit pe **GitHub Actions**. Zero server, zero mentenanță.
+
+> ⚠️ **Fă repo-ul PUBLIC.** Pe repo-uri publice minutele de GitHub Actions sunt **nelimitate și gratis**,
+> deci monitorul poate rula non-stop. Pe repo privat ai doar ~2000 min/lună și s-ar consuma repede.
+> (Nu pui nimic secret în cod — tokenul stă în Secrets, nu în fișiere.)
 
 ## Ce monitorizează
 
@@ -66,9 +70,10 @@ git push -u origin main
 
 ## Note
 
-- **Rapiditate:** GitHub rulează cron-ul la ~5 min, dar uneori îl întârzie 5–15 min la ore de vârf.
-  Pentru viteză maximă (verificare la 30–60 sec) se poate rula pe un VM mereu-pornit
-  (DigitalOcean $200 credit din Student Pack, sau Oracle Cloud Always Free). Vezi secțiunea de jos.
+- **Rapiditate (~30 sec):** GitHub nu permite cron sub 5 minute, dar fiecare job rulează o buclă
+  internă care verifică la fiecare **30 de secunde** timp de ~16 minute; cron-ul repornește jobul
+  la 15 min → acoperire continuă. Poți schimba viteza din `CHECK_INTERVAL` (secunde) în
+  [.github/workflows/monitor.yml](.github/workflows/monitor.yml).
 - **Test manual al notificării:** rulează local `TEST_ALERT=1 python monitor.py`
   (cu variabilele `TELEGRAM_BOT_TOKEN` și `TELEGRAM_CHAT_ID` setate) ca să primești un mesaj de probă.
 - **Stare:** `state.json` reține ce a fost deja văzut ca să nu primești același anunț de mai multe ori.
